@@ -1,6 +1,6 @@
 import gradio as gr
-from config import APP_PASSWORD, MODEL_NAME
-from core import load_system_prompt, load_papers, respond
+from config import APP_PASSWORD, MODEL_NAME, OPENAI_API_KEY
+from core import load_system_prompt, load_papers
 import os
 import openai
 
@@ -39,6 +39,8 @@ def chat_handler(message, history=[]):
     except Exception as e:
         reply = f"Error occurred: {str(e)}"
 
+    return history, history
+
 # ===== Login gate =====
 def check_password(pw):
     if pw == APP_PASSWORD:
@@ -57,7 +59,7 @@ css_centered = ".centered-box { margin: auto; width: 300px; text-align: center; 
 
 with gr.Blocks() as app:
     # Login block
-    with gr.Group(visible=True, css= css_centered) as login_block:
+    with gr.Group(visible=True, elem_classes= css_centered) as login_block:
         with gr.Row():
             gr.Markdown(
                 """
@@ -81,8 +83,8 @@ with gr.Blocks() as app:
             """)
 
         with gr.Row():
-            chat_history = gr.Chatbot(label="Chat", elem_id="chatbot").style(height=400)
-            usr_input = gr.TextBox(placeholder="Escribe un mensaje...", label="Mensaje")
+            chat_history = gr.Chatbot(label="Chat", elem_id="chatbot", type="messages")
+            usr_input = gr.Textbox(placeholder="Escribe un mensaje...", label="Mensaje")
             submit_button = gr.Button("Enviar")
 
     # Interactions
