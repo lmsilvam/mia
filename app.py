@@ -2,6 +2,7 @@ import gradio as gr
 from config import APP_PASSWORD, MODEL_NAME
 from core import load_system_prompt, load_papers, respond
 import os
+import openai
 
 # ===== Load prompt & papers =====
 system_prompt = load_system_prompt()
@@ -14,15 +15,29 @@ session_messages = 0
 # ===== Admin secret from HF environment =====
 admin_password = os.getenv("ADMIN_PASSWORD", "admin123")  # fallback default
 
+# ===== OpenAI API key =====
+openai.api_key = os.getenv("OPENAI_API_KEY", "your_default_key")  # fallback default
+
 # ===== Chat handler =====
-def chat_handler(message, history, tts_enabled):
-    global session_tokens, session_messages
-    reply, audio_path, _, cost, tokens_used = respond(
-        message, history, tts_enabled, papers, system_prompt
-    )
-    session_tokens += tokens_used
-    session_messages += 1
-    return reply, audio_path
+def chat_handler(message, history=[]):
+    messages = [{"role": "system", "content": system_prompt}]
+    for user, bot in history:
+        if user == "User:":
+            messages.append({"role": "user", "content": bot})
+        elif user == "Bot:":
+            messages.append({"role": "assistant", "content": bot})
+    messages.append({"role": "user", "content": message})
+
+    # Get response from OpenAI API
+    try:
+        response = openai.ChatCompletion.create(
+            model=MODEL_NAME, 
+            messages=messages,
+            temperature=0.7  # Adjust for more or less randomness
+        )
+        reply = response["choices"][0]["message"]["content"]
+    except Exception as e:
+        reply = f"Error occurred: {str(e)}"
 
 # ===== Login gate =====
 def check_password(pw):
@@ -38,32 +53,49 @@ def show_admin_info(pw):
     return f"🧾 Mensajes: {session_messages}\n🔢 Tokens: {session_tokens}\n💸 Estimado: ${cost:.4f}"
 
 # ===== UI layout =====
+css_centered = ".centered-box { margin: auto; width: 300px; text-align: center; }"
+
 with gr.Blocks() as app:
     # Login block
-    with gr.Row(visible=True) as login_row:
-        password = gr.Textbox(label="Clave", type="password", scale=4)
-        login_btn = gr.Button("Entrar", scale=1, min_width=80)
+    with gr.Group(visible=True, css= css_centered) as login_block:
+        with gr.Row():
+            gr.Markdown(
+                """
+                <h1>🔑 Acceso a Mia</h1>
+                <p>Por favor, introduce la clave.</p>
+                """
+            )
+
+        with gr.Row():
+            password = gr.Textbox(label="Clave", type="password")
+
+        with gr.Row():
+            login_btn = gr.Button("Entrar")
 
     # Main chat interface block (full width)
-    chat_row = gr.Column(visible=False)
-    with chat_row:
-        gr.HTML("""
-            <h1>🧠 Mia - IA para Psicología</h1>
-            <p>¡Te ayuda a estudiar y a guiarte hacia el conocimiento sobre la investigación! 😉</p>
-        """)
+    with gr.Group(visible=False) as chat_block:
+        with gr.Row():
+            gr.HTML("""
+                <h1>🧠 Mia - IA para Psicología</h1>
+                <p>¡Te ayuda a estudiar y a guiarte hacia el conocimiento sobre la investigación! 😉</p>
+            """)
 
-        chatbot = gr.ChatInterface(
-            fn=chat_handler,
-            title="¿Cómo te puedo ayudar hoy?",
-            chatbot=gr.Chatbot(type="messages"),
-            #additional_inputs=[tts_toggle],
-            additional_outputs=[gr.Audio(type="filepath", autoplay=True)],
-            type="messages"
-        )
+        with gr.Row():
+            chat_history = gr.Chatbot(label="Chat", elem_id="chatbot").style(height=400)
+            usr_input = gr.TextBox(placeholder="Escribe un mensaje...", label="Mensaje")
+            submit_button = gr.Button("Enviar")
 
-        #tts_toggle = gr.Checkbox(label="🔊 Activar respuesta por voz", value=False)
-        
-    login_btn.click(fn=check_password, inputs=password, outputs=[login_row, chat_row])
+    # Interactions
+    submit_button.click(
+        fn=chat_handler,
+        inputs=[usr_input, chat_history],
+        outputs=[chat_history, chat_history],
+    )        
+
+    login_btn.click(
+        fn=check_password, 
+        inputs=password, 
+        outputs=[login_block, chat_block])
 
     # Admin Panel
     with gr.Accordion("🔧 Admin Panel", open=False):
