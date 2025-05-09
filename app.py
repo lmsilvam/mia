@@ -8,10 +8,6 @@ import openai
 system_prompt = load_system_prompt()
 #papers = load_papers()
 
-# ===== Session usage counters =====
-session_tokens = 0
-session_messages = 0
-
 # ===== Config secrets =====
 admin_password = os.getenv("ADMIN_PASSWORD", "admin123")  
 openai.api_key = os.getenv("OPENAI_API_KEY", "your_default_key")
@@ -21,24 +17,26 @@ model_name = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
 def chat_handler(message, history):
     """Called by Gradio when the user submits a message."""
     
-    # 1st create the input for the chat, by merging history with request
-    chat_input = history.append({"role": "user", "content": message})  # Append the user's message to the history
+    print("New history!")
+    history_copy = history.copy()
+    last_10_entries = [{"role": entry["role"], "content": entry["content"]} for entry in history_copy[-10:]]
+    history_copy.append({"role": "user", "content": message}) 
 
-    # Get response from OpenAI API - we'll be using the newer Responses API
+    # Print dictionaries in the new_history list
+    for entry in history_copy:
+        print(entry, end="\n\n")
     try:
         response = openai.responses.create(
             model = model_name, 
             instructions = system_prompt,
-            input = chat_input,
+            input = history_copy,
             temperature=0.6  
         )
         reply = response.output[0].content[0].text
-        chat_history.append({"role": "assistant", "content": reply})  # Append the assistant's reply to the history
+        new_history.append({"role": "assistant", "content": reply})
     except Exception as e:
         reply = f"Error occurred: {str(e)}"
-
-    print(chat_history)
-    return chat_history 
+    return new_history 
 
 # ===== Login gate =====
 def check_password(pw):
